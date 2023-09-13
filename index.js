@@ -2,10 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const {
   MongoClient,
-  ServerApiVersion
+  ServerApiVersion,
+  ObjectId
 } = require('mongodb');
 require('dotenv').config()
 const app = express()
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 
@@ -33,8 +35,8 @@ async function run() {
 
     const courseCollection = client.db("RunTheStack").collection("courses")
     const usersCollection = client.db("RunTheStack").collection("users")
-
     const questionCollection = client.db('RunTheStack').collection('question')
+
 
     // get question data from mongodb
     app.get('/question', async (req, res) => {
@@ -75,6 +77,17 @@ async function run() {
       res.send(result)
     })
 
+    app.patch('/users/admin/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id)}
+      const updateDoc = {
+        $set: {
+          role: "admin"
+        }
+      }
+      const result = await usersCollection.updateOne(filter, updateDoc)
+      res.send(result)
+    })
 
     app.get('/courses', async (req, res) => {
       const cursor = courseCollection.find()
@@ -82,14 +95,21 @@ async function run() {
       res.send(result)
     })
 
-    //save room in database
-    app.post('/rooms', async (req, res) => {
-      const room = req.body;
-      console.log(room);
-      const result = await roomsCollection.insertOne(room)
-      res.send(result)
+    //create payment intent
+    app.post('/create-payment-intent', async (req, res) => {
+      const {
+        price
+      } = req.body;
+      const amount = price * 100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
     })
-
 
 
     // Send a ping to confirm a successful connection
